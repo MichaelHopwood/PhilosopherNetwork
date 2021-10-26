@@ -1,8 +1,11 @@
 class Node:
 
-    def __init__(self, name, page="NA"):
+    def __init__(self, name, page="NA", birthyear='NA', birthlong='NA', birthlat='NA'):
         self.name = name
         self.page = page
+        self.birth = birthyear
+        self.birthlong = birthlong
+        self.birthlat = birthlat
         self.incoming_link_names = []  # this is a list of the names of incoming nodes
         self.incoming_links = []       # this is a list of references to incoming nodes
         self.outgoing_link_names = []  # this is a list of the names of outgoing nodes
@@ -41,6 +44,12 @@ class Node:
     def set_page(self, page):
         self.page = page
 
+    def get_birth(self):
+        return self.birth
+
+    def set_birth(self, birth):
+        self.birth = birth
+
     def deduplicate_links(self):
         self.incoming_link_names = set(self.incoming_link_names)
         self.outgoing_link_names = set(self.outgoing_link_names)
@@ -56,4 +65,14 @@ class Node:
             print(i)
 
     def brief_summary(self):
-        print(f"Philosopher {self.name} has {len(self.incoming_links)} influences and influenced {len(self.outgoing_links)}")
+        print(f"Philosopher {self.name} with life {self.birth} has {len(self.incoming_links)} influences and influenced {len(self.outgoing_links)}")
+
+    def fetch_data(self):
+        incoming_links = ""
+        outgoing_links = ""
+        for link in self.incoming_link_names:
+            incoming_links += link+":"
+        for link in self.outgoing_link_names:
+            outgoing_links += link+":"
+
+        return self.name, self.birth, incoming_links, outgoing_links

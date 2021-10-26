@@ -1,5 +1,6 @@
 """
 Written by Alexander Valarus
+Adapted by Michael Hopwood
 Fall 2021
 """
 
@@ -8,6 +9,8 @@ import re
 import random
 from bs4 import BeautifulSoup
 from node import Node
+from tqdm import tqdm
+import pandas as pd
 
 WIKI = "https://en.wikipedia.org"
 nodes = {}
@@ -21,7 +24,7 @@ def get_soup(page):
         page.raise_for_status()
         soup = BeautifulSoup(page.text, 'html.parser')
     except:
-        print("Page cannot be accessed.")
+        #print("Page cannot be accessed.")
         soup = None
     return soup
 
@@ -92,7 +95,8 @@ def find_influence(bio):
 def scrape_list():
     """
     Establishes a connection with wikipedia's pages listing philosophers
-    then scrapes every url of every catalogued philosopher
+    then scrapes every url of every catalogued philosopher. Note that
+    all of these links are the canonical urls, so no check is needed.
     """
     list_of_philosophers = []
     wiki_philosopher_lists = ['/wiki/List_of_philosophers_(A–C)',
@@ -124,10 +128,10 @@ def scrape_list():
         for trash in div('p'):
             trash.decompose()
 
-        philosophers = div.find_all('a')
+        philosophers = div.find_all('li')
 
-        # Finally, put all of the urls in a list
-        philosopher_pages = [(i.get('title'), i.get('href')) for i in philosophers]
+        # Finally, put all of the urls (and birth eras) in a list
+        philosopher_pages = [(i.contents[0].get('title'), i.contents[0].get('href'), i.contents[-1]) for i in philosophers]
         list_of_philosophers += philosopher_pages
 
     return list_of_philosophers
@@ -137,20 +141,21 @@ def set_pages(page_list):
     node_pages = [wiki_page for _, wiki_page in page_list]
 
 
-def scrape_philosopher(name, page):
+def scrape_philosopher(name, page, birthyear='unknown'):
     """
     Establishes a connection with a philosopher's wikipedia page and scrapes all influences/influenced
     :param name:
     :param page:
+    :param birthyear: a string that gives approximate life era
     :return: None
     """
 
-    print(f"\n\nResearching {name}...", end='')
+    #print(f"\n\nResearching {name}...", end='')
     # Connect to wikipedia and get the html of the page
     soup = get_soup(page)
     if soup is None:
-        print(f" {name} has no Wiki page.")
-        new_philosopher = Node(name, page)
+        #print(f" {name} has no Wiki page.")
+        new_philosopher = Node(name, page, birthyear)
         return new_philosopher
 
     # Initialize blank variables for influences/influenced tags
@@ -163,11 +168,11 @@ def scrape_philosopher(name, page):
     bio_table = find_bio_table(soup)
 
     if bio_table is None:
-        print(f" {name} has no bio section.", end='')
-        new_philosopher = Node(name, page)
+        #print(f" {name} has no bio section.", end='')
+        new_philosopher = Node(name, page, birthyear)
         return new_philosopher
-    else:
-        print(f" bio found...", end='')
+    #else:
+        #print(f" bio found...", end='')
 
     # Next, find all influences/influenced by checking several different types of info boxes.
     raw_influences, raw_influenced = find_influence(bio_table)
@@ -176,13 +181,13 @@ def scrape_philosopher(name, page):
     if raw_influences:
         raw_influences = clean_tag(raw_influences)
         raw_influences = raw_influences.find_all('a')
-    else:
-        print(f" {name} has no influences data.", end='')
+    #else:
+        #print(f" {name} has no influences data.", end='')
     if raw_influenced:
         raw_influenced = clean_tag(raw_influenced)
         raw_influenced = raw_influenced.find_all('a')
-    else:
-        print(f" {name} has no influenced data.", end='')
+    #else:
+        #print(f" {name} has no influenced data.", end='')
 
     # Store the philosopher names and page extensions in a list of tuples
     if raw_influences:
@@ -191,7 +196,7 @@ def scrape_philosopher(name, page):
         influenced = [(i.get_text(), i.get('href')) for i in raw_influenced]
 
     # Construct a Node for this philosopher as add influence/influenced links
-    new_philosopher = Node(name, page)
+    new_philosopher = Node(name, page, birthyear)
     for i in influences:
         new_philosopher.add_influence(*i)
     for i in influenced:
@@ -200,16 +205,31 @@ def scrape_philosopher(name, page):
     return new_philosopher
 
 
+def get_canonical_url(page):
+    """
+    This function goes to a wikipedia page and returns the page's canonical url.
+    The reason that this is important is that multiple urls may link to the same page, but
+    there is always only one canonical url for that page. When adding a node from a crawled link,
+    checking the page's canonical url guarantees that we are not adding duplicates.
+    Example: wiki/Husserl (non-canonical) links to wiki/Edmund_Husserl (canonical). If we don't
+    check the canonical name, this would result in him incorrectly having two different nodes.
+    :param page:
+    :return: canonical_url
+    """
+    soup = get_soup(page)
+    if soup is None:
+        return None
+    canonical_url = soup.find('link', {'rel': 'canonical'})
+    canonical_url = canonical_url.get('href').split('org')[1]
+    return canonical_url
+
+
 def validate_links(key):
     """
-    This function checks every link in one node and ensures the link it recognized by the paired node.
+    This function checks every link in one node and ensures the link is recognized by the paired node.
     :param key:
     :return: None
     """
-    # TODO: This needs to verify the correct name from the individual's page. Otherwise it may give only last name
-    # TODO: only an alias, which can cause duplicates in the node data (same individual with different names).
-    # TODO: i.e. We already have Immanuel Kant, but then we will also find "Kant" and add him again as "Kant"
-    # TODO: Need to switch the node keys to the wiki url, not the name. The urls are more consistent.
     initial_node = nodes[key]
     initial_name = initial_node.get_name()
     initial_page = initial_node.get_page()
@@ -218,18 +238,20 @@ def validate_links(key):
     keys = list(nodes.keys())
 
     for incoming_name, incoming_page in node_incoming_links:
-        if incoming_page not in node_pages:
-            nodes[incoming_name] = Node(incoming_name, incoming_page)
-            node_pages.append(incoming_page)
+        canonical_url = get_canonical_url(incoming_page)
+        if canonical_url not in node_pages and canonical_url is not None:
+            nodes[incoming_name] = Node(incoming_name, canonical_url)
+            node_pages.append(canonical_url)
             target = nodes[incoming_name]
             target_outgoing = target.get_outgoing()
             if initial_name not in (n for (n, _) in target_outgoing):
                 target.add_influenced(initial_name, initial_page)
 
     for outgoing_name, outgoing_page in node_outgoing_links:
-        if outgoing_page not in node_pages:
-            nodes[outgoing_name] = Node(outgoing_name, outgoing_page)
-            node_pages.append(outgoing_page)
+        canonical_url = get_canonical_url(outgoing_page)
+        if canonical_url not in node_pages:
+            nodes[outgoing_name] = Node(outgoing_name, canonical_url)
+            node_pages.append(canonical_url)
             target = nodes[outgoing_name]
             target_incoming = target.get_incoming()
             if initial_name not in (n for (n, _) in target_incoming):
@@ -238,40 +260,66 @@ def validate_links(key):
 
 def validate_node(key):
     # TODO: Double check to make sure this is working as expected
-    if not nodes[key].outgoing_links:
+    if not nodes[key].outgoing_links and not nodes[key].incoming_links:
         del nodes[key]
     else:
         nodes[key].deduplicate_links()
 
+
+def export_data():
+
+    names, births, incoming_links, outgoing_links, pages = [], [], [], [], []
+    for k, node in nodes.items():
+        name, birth, i_links, o_links = node.fetch_data()
+        names.append(name)
+        births.append(birth)
+        incoming_links.append(i_links)
+        outgoing_links.append(o_links)
+        pages.append(node.page)
+
+    data = pd.DataFrame()
+    data['name'] = names
+    data['birth'] = births
+    data['incoming_links'] = incoming_links
+    data['outgoing_links'] = outgoing_links
+    data['page'] = pages
+    data.to_csv('philosopher_data.csv', encoding='UTF-8')
 
 def main():
     global nodes
     global node_pages
     print("Discovering Philosophy Network...\n")
 
+    # Scrape the list of wiki pages first
     philosopher_list = scrape_list()
-    node_pages = [wiki_page for _, wiki_page in philosopher_list]
-    for philosopher in philosopher_list:
+    node_pages = [wiki_page for _, wiki_page, _ in philosopher_list]
+
+    # Create a dictionary of nodes using the scrap philosopher function
+    # The key to each node is the person's name
+    print("Scraping philosophers...")
+    for philosopher in tqdm(philosopher_list):
         nodes[philosopher[0]] = scrape_philosopher(*philosopher)
 
+    # Check to see how many nodes there are in the initial list
     keys = list(nodes.keys())
-    print(f"\nThere are {len(keys)} recorded nodes.")
-    for key in keys:
+    print(f"\nThere are {len(keys)} recorded nodes before link validation.")
+
+    # Validate every link and every node
+    print("Validating links...")
+    for key in tqdm(keys):
         validate_links(key)
-    for key in keys:
+    print("Validating nodes...")
+    keys = list(nodes.keys())
+    print(f"\nThere are {len(keys)} recorded nodes before node validation.")
+    for key in tqdm(keys):
         validate_node(key)
 
-    keys = []
-    for i in range(12):
-        keys.append(random.choice(list(nodes.keys())))
-
-    for key in keys:
-        nodes[key].summary()
-
     keys = list(nodes.keys())
-    print(f"There are {len(keys)} recorded nodes.")
+    print(f"There are {len(keys)} final recorded nodes after all validation.")
     for key in list(nodes.keys()):
+        nodes[key].brief_summary()
         print(f"{nodes[key].name}: {nodes[key].page}.")
+    export_data()
 
 
 if __name__ == "__main__":
