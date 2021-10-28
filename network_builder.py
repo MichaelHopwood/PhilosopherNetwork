@@ -9,6 +9,8 @@ import dgl
 import datefinder
 import re
 
+import json
+
 # Run `python network_builder.py -load_folder data2
 # To specify the output folder
 # @dev: you can reference this specification by using `args.save_folder`
@@ -38,6 +40,31 @@ class GraphBuilder:
         # self.node_features = dict(zip(
 
     def _pre_prep(self):
+
+        self.data['num_incoming_links'] = self.data['incoming_links'].apply(lambda x: len(x.split(':')) if isinstance(x, str) else 0)
+        self.data['num_outgoing_links'] = self.data['outgoing_links'].apply(lambda x: len(x.split(':')) if isinstance(x, str) else 0)
+        
+        print("Num people with nonzero incoming links: ", len(self.data[ self.data['num_incoming_links'] > 0 ]))
+        print("Num people with nonzero outgoing links: ", len(self.data[ self.data['num_outgoing_links'] > 0 ]))
+
+        valid_data = self.data[ self.data['num_outgoing_links'] > 0 ]
+        valid_data['latitude'] = 'FILL'
+        valid_data['longitude'] = 'FILL'
+        
+        del valid_data['num_incoming_links']
+        del valid_data['num_outgoing_links']
+
+        # Shuffle dataframe
+        valid_data = valid_data.sample(frac=1)
+        michael, alex, randyll = np.array_split(valid_data, 3)
+        print(len(michael), len(alex), len(randyll))
+        michael.to_csv('michael.csv', index=False)
+        michael.to_csv('alexander.csv', index=False)
+        michael.to_csv('randyll.csv', index=False)
+
+        import sys
+        sys.exit()
+
         self.data.dropna(inplace=True, subset=[DATE_COL])
 
     def find_date(self, string, default_age_length=100):
@@ -97,6 +124,7 @@ class GraphBuilder:
     def prep_dates(self):
         for idx, row in self.data.iterrows():
             birth_date, death_date = self.find_date(row[DATE_COL])
+            # print(json.dumps(dict(zip(['String', 'Birth', 'Death'],[row[DATE_COL], birth_date, death_date]))))
 
     def build_graph(self, type_graph='dgl'):
         '''Convert numpy arrays to graph.
