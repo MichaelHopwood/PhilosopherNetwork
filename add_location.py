@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+import re
+import traceback
 
 # Example: http://www.geonames.org/search.html?q=paris+france&country=
 base_url = "http://www.geonames.org/search.html?q="
@@ -42,15 +44,83 @@ def get_wiki_location(philosopher_extension):
     latlong = div[0].text
     return latlong
 
-data = pd.read_csv('michael.csv')
+def convert(tude):
+    """Convert lat/long strings of form:
+    Example: 
+       N 52° 13' 47''
+       E 21° 0' 42''
+       convert() =>
+       52.22972222222222 21.011666666666667
+    """
+    multipler = 1 if tude[0] in ['N', 'E'] else -1
+    print("MULTIPLIER", multipler, tude)
+    info = re.split('[°\'"]', tude[1:])
+    deg, minutes, seconds = float(info[0]), float(info[1]), float(info[2])
+    return (float(deg) + float(minutes)/60 + float(seconds)/(60*60)) * multipler
+
+def extract_numeric(s):
+    splits = re.split(' ', s)
+    lat_mult = 1 if splits[0][-1] in ['N', 'E'] else -1
+    lat = float(re.split('°', splits[0])[0]) * lat_mult
+    lon_mult = 1 if splits[1][-1] in ['N', 'E'] else -1
+    lon = float(re.split('°', splits[1])[0]) * lon_mult
+    try:
+        return lat, lon
+    except:
+        print(s)
+        print(splits)
+        print(lat, lon)
+        print(re.split('°', splits[0])[0])
+        print(re.split('°', splits[1])[0])
+        return float(lat), float(lon)
+
+#data = pd.read_csv('alexander_testset.csv')
+data = pd.read_csv('randyll.csv')
+#data = pd.read_csv('michael.csv')
+
+
+
 successes = 0
+accurate = 0
+manually_filled = 0
+lats, lons = [], []
 for ind,row in data.iterrows():
     print(row['page'])
     try:
         latlong = get_wiki_location(row['page'])
-        print(latlong)
+        lat,lon = extract_numeric(latlong)
         successes += 1
-    except:
-        pass
+
+        print("extracted: ", lat, lon)
+
+        # compare to manually annotated
+        if row['latitude'] != 'FILL':
+            manually_filled += 1
+
+            manual_lat, manual_lon = convert(row['latitude']), convert(row['longitude'])
+            print("annotated: ", row['latitude'], row['longitude'])
+            print("annot conv:", manual_lat, manual_lon) 
+
+            pct_diff_lat = (lat - manual_lat) / (lat + manual_lat)/2
+            pct_diff_lon = (lon - manual_lon) / (lon + manual_lon)/2
+            print(pct_diff_lat, pct_diff_lon)
+            if (pct_diff_lon < 1) & (pct_diff_lat < 1):
+                accurate += 1
+            
+        lats.append(lat)
+        lons.append(lon)
+
+    except Exception as e:
+        print(e)
+        traceback.print_exc()
+        lats.append('FILL')
+        lons.append('FILL')
+    print()
 
 print(f"{successes} successes out of {len(data)}")
+print(f"Accurate: {accurate} out of {manually_filled} manually filled.")
+
+data['latitude'] = lats
+data['longitude'] = lons
+
+data.to_csv('randyll_algoaddition.csv')
