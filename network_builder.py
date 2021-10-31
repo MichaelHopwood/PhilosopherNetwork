@@ -56,11 +56,11 @@ class GraphBuilder:
 
         # Shuffle dataframe
         valid_data = valid_data.sample(frac=1)
-        michael, alex, randyll = np.array_split(valid_data, 3)
+        alex, michael, randyll = np.array_split(valid_data, 3)
         print(len(michael), len(alex), len(randyll))
         michael.to_csv('michael.csv', index=False)
-        michael.to_csv('alexander.csv', index=False)
-        michael.to_csv('randyll.csv', index=False)
+        alex.to_csv('alexander.csv', index=False)
+        randyll.to_csv('randyll.csv', index=False)
 
         import sys
         sys.exit()

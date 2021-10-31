@@ -74,11 +74,9 @@ def extract_numeric(s):
         print(re.split('°', splits[1])[0])
         return float(lat), float(lon)
 
-#data = pd.read_csv('alexander_testset.csv')
-data = pd.read_csv('randyll.csv')
-#data = pd.read_csv('michael.csv')
-
-
+#data = pd.read_csv('data//alexander.csv')
+#data = pd.read_csv('data//randyll.csv')
+data = pd.read_csv('data//michael.csv')
 
 successes = 0
 accurate = 0
@@ -123,4 +121,4 @@ print(f"Accurate: {accurate} out of {manually_filled} manually filled.")
 data['latitude'] = lats
 data['longitude'] = lons
 
-data.to_csv('randyll_algoaddition.csv')
+data.to_csv('data//michael_algoaddition.csv')
