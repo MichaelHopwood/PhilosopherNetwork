@@ -1,5 +1,7 @@
 *.html
 .DS_Store
+figs/
+world.gif
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

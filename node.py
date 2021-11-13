@@ -76,3 +76,4 @@ class Node:
             outgoing_links += link+":"
 
         return self.name, self.birth, incoming_links, outgoing_links
+

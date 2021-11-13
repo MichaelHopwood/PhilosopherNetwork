@@ -20,6 +20,7 @@
 
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
+import pandas as pd
 
 ax = plt.axes(projection=ccrs.PlateCarree())
 ax.stock_img()
